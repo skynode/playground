@@ -13,9 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-/// <reference path="typings/browser.d.ts" />
-/// <reference path="seedrandom.d.ts" />
-
 import * as nn from "./nn";
 import {HeatMap, reduceMatrix} from "./heatmap";
 import {
@@ -104,6 +101,9 @@ class Player {
       this.pause();
     } else {
       this.isPlaying = true;
+      if (iter === 0) {
+        simulationStarted();
+      }
       this.play();
     }
   }
@@ -177,11 +177,13 @@ let lineChart = new AppendingLineChart(d3.select("#linechart"),
 function makeGUI() {
   d3.select("#reset-button").on("click", () => {
     reset();
+    userHasInteracted();
     d3.select("#play-pause-button");
   });
 
   d3.select("#play-pause-button").on("click", function () {
     // Change the button's content.
+    userHasInteracted();
     player.playOrPause();
   });
 
@@ -191,11 +193,16 @@ function makeGUI() {
 
   d3.select("#next-step-button").on("click", () => {
     player.pause();
+    userHasInteracted();
+    if (iter === 0) {
+      simulationStarted();
+    }
     oneStep();
   });
 
   d3.select("#data-regen-button").on("click", () => {
     generateData();
+    parametersChanged = true;
   });
 
   let dataThumbnails = d3.selectAll("canvas[data-dataset]");
@@ -208,6 +215,7 @@ function makeGUI() {
     dataThumbnails.classed("selected", false);
     d3.select(this).classed("selected", true);
     generateData();
+    parametersChanged = true;
     reset();
   });
 
@@ -226,6 +234,7 @@ function makeGUI() {
     regDataThumbnails.classed("selected", false);
     d3.select(this).classed("selected", true);
     generateData();
+    parametersChanged = true;
     reset();
   });
 
@@ -240,6 +249,7 @@ function makeGUI() {
     }
     state.networkShape[state.numHiddenLayers] = 2;
     state.numHiddenLayers++;
+    parametersChanged = true;
     reset();
   });
 
@@ -249,12 +259,14 @@ function makeGUI() {
     }
     state.numHiddenLayers--;
     state.networkShape.splice(state.numHiddenLayers);
+    parametersChanged = true;
     reset();
   });
 
   let showTestData = d3.select("#show-test-data").on("change", function() {
     state.showTestData = this.checked;
     state.serialize();
+    userHasInteracted();
     heatMap.updateTestPoints(state.showTestData ? testData : []);
   });
   // Check/uncheck the checkbox according to the current state.
@@ -263,6 +275,7 @@ function makeGUI() {
   let discretize = d3.select("#discretize").on("change", function() {
     state.discretize = this.checked;
     state.serialize();
+    userHasInteracted();
     updateUI();
   });
   // Check/uncheck the checbox according to the current state.
@@ -272,6 +285,7 @@ function makeGUI() {
     state.percTrainData = this.value;
     d3.select("label[for='percTrainData'] .value").text(this.value);
     generateData();
+    parametersChanged = true;
     reset();
   });
   percTrain.property("value", state.percTrainData);
@@ -281,6 +295,7 @@ function makeGUI() {
     state.noise = this.value;
     d3.select("label[for='noise'] .value").text(this.value);
     generateData();
+    parametersChanged = true;
     reset();
   });
   noise.property("value", state.noise);
@@ -289,6 +304,7 @@ function makeGUI() {
   let batchSize = d3.select("#batchSize").on("input", function() {
     state.batchSize = this.value;
     d3.select("label[for='batchSize'] .value").text(this.value);
+    parametersChanged = true;
     reset();
   });
   batchSize.property("value", state.batchSize);
@@ -296,6 +312,7 @@ function makeGUI() {
 
   let activationDropdown = d3.select("#activations").on("change", function() {
     state.activation = activations[this.value];
+    parametersChanged = true;
     reset();
   });
   activationDropdown.property("value",
@@ -303,12 +320,16 @@ function makeGUI() {
 
   let learningRate = d3.select("#learningRate").on("change", function() {
     state.learningRate = +this.value;
+    state.serialize();
+    userHasInteracted();
+    parametersChanged = true;
   });
   learningRate.property("value", state.learningRate);
 
   let regularDropdown = d3.select("#regularizations").on("change",
       function() {
     state.regularization = regularizations[this.value];
+    parametersChanged = true;
     reset();
   });
   regularDropdown.property("value",
@@ -316,6 +337,7 @@ function makeGUI() {
 
   let regularRate = d3.select("#regularRate").on("change", function() {
     state.regularizationRate = +this.value;
+    parametersChanged = true;
     reset();
   });
   regularRate.property("value", state.regularizationRate);
@@ -324,6 +346,7 @@ function makeGUI() {
     state.problem = problems[this.value];
     generateData();
     drawDatasetThumbnails();
+    parametersChanged = true;
     reset();
   });
   problem.property("value", getKeyFromValue(problems, state.problem));
@@ -356,6 +379,7 @@ function makeGUI() {
   if (state.hideText) {
     d3.select("#article-text").style("display", "none");
     d3.select("div.more").style("display", "none");
+    d3.select("header").style("display", "none");
   }
 }
 
@@ -419,7 +443,7 @@ function drawNode(cx: number, cy: number, nodeId: string, isInput: boolean,
       let myRe = /(.*?)([_^])(.)/g;
       let myArray;
       let lastIndex;
-      while ((myArray = myRe.exec(label)) !== null) {
+      while ((myArray = myRe.exec(label)) != null) {
         lastIndex = myRe.lastIndex;
         let prefix = myArray[1];
         let sep = myArray[2];
@@ -428,7 +452,7 @@ function drawNode(cx: number, cy: number, nodeId: string, isInput: boolean,
           text.append("tspan").text(prefix);
         }
         text.append("tspan")
-        .attr("baseline-shift", sep == "_" ? "sub" : "super")
+        .attr("baseline-shift", sep === "_" ? "sub" : "super")
         .style("font-size", "9px")
         .text(suffix);
       }
@@ -485,6 +509,7 @@ function drawNode(cx: number, cy: number, nodeId: string, isInput: boolean,
   if (isInput) {
     div.on("click", function() {
       state[nodeId] = !state[nodeId];
+      parametersChanged = true;
       reset();
     });
     div.style("cursor", "pointer");
@@ -509,8 +534,8 @@ function drawNetwork(network: nn.Node[][]): void {
 
   // Get the width of the svg container.
   let padding = 3;
-  let co = <HTMLDivElement> d3.select(".column.output").node();
-  let cf = <HTMLDivElement> d3.select(".column.features").node();
+  let co = d3.select(".column.output").node() as HTMLDivElement;
+  let cf = d3.select(".column.features").node() as HTMLDivElement;
   let width = co.offsetLeft - cf.offsetLeft;
   svg.attr("width", width);
 
@@ -539,7 +564,7 @@ function drawNetwork(network: nn.Node[][]): void {
   let maxY = nodeIndexScale(nodeIds.length);
   nodeIds.forEach((nodeId, i) => {
     let cy = nodeIndexScale(i) + RECT_SIZE / 2;
-    node2coord[nodeId] = {cx: cx, cy: cy};
+    node2coord[nodeId] = {cx, cy};
     drawNode(cx, cy, nodeId, true, container);
   });
 
@@ -552,7 +577,7 @@ function drawNetwork(network: nn.Node[][]): void {
     for (let i = 0; i < numNodes; i++) {
       let node = network[layerIdx][i];
       let cy = nodeIndexScale(i) + RECT_SIZE / 2;
-      node2coord[node.id] = {cx: cx, cy: cy};
+      node2coord[node.id] = {cx, cy};
       drawNode(cx, cy, node.id, false, container, node);
 
       // Show callout to thumbnails.
@@ -572,8 +597,8 @@ function drawNetwork(network: nn.Node[][]): void {
       // Draw links.
       for (let j = 0; j < node.inputLinks.length; j++) {
         let link = node.inputLinks[j];
-        let path: SVGPathElement = <any> drawLink(link, node2coord, network,
-            container, j === 0, j, node.inputLinks.length).node();
+        let path: SVGPathElement = drawLink(link, node2coord, network,
+            container, j === 0, j, node.inputLinks.length).node() as any;
         // Show callout to weights.
         let prevLayer = network[layerIdx - 1];
         let lastNodePrevLayer = prevLayer[prevLayer.length - 1];
@@ -599,7 +624,7 @@ function drawNetwork(network: nn.Node[][]): void {
   cx = width + RECT_SIZE / 2;
   let node = network[numLayers - 1][0];
   let cy = nodeIndexScale(0) + RECT_SIZE / 2;
-  node2coord[node.id] = {cx: cx, cy: cy};
+  node2coord[node.id] = {cx, cy};
   // Draw links.
   for (let i = 0; i < node.inputLinks.length; i++) {
     let link = node.inputLinks[i];
@@ -619,7 +644,7 @@ function drawNetwork(network: nn.Node[][]): void {
 }
 
 function getRelativeHeight(selection: d3.Selection<any>) {
-  let node = <HTMLAnchorElement> selection.node();
+  let node = selection.node() as HTMLAnchorElement;
   return node.offsetHeight + node.offsetTop;
 }
 
@@ -638,6 +663,7 @@ function addPlusMinusControl(x: number, layerIdx: number) {
           return;
         }
         state.networkShape[i]++;
+        parametersChanged = true;
         reset();
       })
     .append("i")
@@ -652,6 +678,7 @@ function addPlusMinusControl(x: number, layerIdx: number) {
           return;
         }
         state.networkShape[i]--;
+        parametersChanged = true;
         reset();
       })
     .append("i")
@@ -678,25 +705,25 @@ function updateHoverCard(type: HoverType, nodeOrLink?: nn.Node | nn.Link,
     input.style("display", null);
     input.on("input", function() {
       if (this.value != null && this.value !== "") {
-        if (type == HoverType.WEIGHT) {
-          (<nn.Link>nodeOrLink).weight = +this.value;
+        if (type === HoverType.WEIGHT) {
+          (nodeOrLink as nn.Link).weight = +this.value;
         } else {
-          (<nn.Node>nodeOrLink).bias = +this.value;
+          (nodeOrLink as nn.Node).bias = +this.value;
         }
         updateUI();
       }
     });
     input.on("keypress", () => {
-      if ((<any>d3.event).keyCode == 13) {
+      if ((d3.event as any).keyCode === 13) {
         updateHoverCard(type, nodeOrLink, coordinates);
       }
     });
-    (<HTMLInputElement>input.node()).focus();
+    (input.node() as HTMLInputElement).focus();
   });
-  let value = type == HoverType.WEIGHT ?
-    (<nn.Link>nodeOrLink).weight :
-    (<nn.Node>nodeOrLink).bias;
-  let name = type == HoverType.WEIGHT ? "Weight" : "Bias";
+  let value = (type === HoverType.WEIGHT) ?
+    (nodeOrLink as nn.Link).weight :
+    (nodeOrLink as nn.Node).bias;
+  let name = (type === HoverType.WEIGHT) ? "Weight" : "Bias";
   hovercard.style({
     "left": `${coordinates[0] + 20}px`,
     "top": `${coordinates[1]}px`,
@@ -899,9 +926,12 @@ export function getOutputWeights(network: nn.Node[][]): number[] {
   return weights;
 }
 
-function reset() {
+function reset(onStartup=false) {
   lineChart.reset();
   state.serialize();
+  if (!onStartup) {
+    userHasInteracted();
+  }
   player.pause();
 
   let suffix = state.numHiddenLayers !== 1 ? "s" : "";
@@ -912,7 +942,7 @@ function reset() {
   iter = 0;
   let numInputs = constructInput(0 , 0).length;
   let shape = [numInputs].concat(state.networkShape).concat([1]);
-  let outputActivation = (state.problem == Problem.REGRESSION) ?
+  let outputActivation = (state.problem === Problem.REGRESSION) ?
       nn.Activations.LINEAR : nn.Activations.TANH;
   network = nn.buildNetwork(shape, state.activation, outputActivation,
       state.regularization, constructInputIds(), state.initZero);
@@ -923,7 +953,7 @@ function reset() {
 };
 
 function initTutorial() {
-  if (state.tutorial == null) {
+  if (state.tutorial == null || state.tutorial === '' || state.hideText) {
     return;
   }
   // Remove all other text.
@@ -935,7 +965,7 @@ function initTutorial() {
     if (err) {
       throw err;
     }
-    (<any>tutorial.node()).appendChild(htmlFragment);
+    tutorial.node().appendChild(htmlFragment);
     // If the tutorial has a <title> tag, set the page title to that.
     let title = tutorial.select("title");
     if (title.size()) {
@@ -965,7 +995,7 @@ function drawDatasetThumbnails() {
   }
   d3.selectAll(".dataset").style("display", "none");
 
-  if (state.problem == Problem.CLASSIFICATION) {
+  if (state.problem === Problem.CLASSIFICATION) {
     for (let dataset in datasets) {
       let canvas: any =
           document.querySelector(`canvas[data-dataset=${dataset}]`);
@@ -973,7 +1003,7 @@ function drawDatasetThumbnails() {
       renderThumbnail(canvas, dataGenerator);
     }
   }
-  if (state.problem == Problem.REGRESSION) {
+  if (state.problem === Problem.REGRESSION) {
     for (let regDataset in regDatasets) {
       let canvas: any =
           document.querySelector(`canvas[data-regDataset=${regDataset}]`);
@@ -988,7 +1018,7 @@ function hideControls() {
   let hiddenProps = state.getHiddenProps();
   hiddenProps.forEach(prop => {
     let controls = d3.selectAll(`.ui-${prop}`);
-    if (controls.size() == 0) {
+    if (controls.size() === 0) {
       console.warn(`0 html elements found with class .ui-${prop}`);
     }
     controls.style("display", "none");
@@ -1005,12 +1035,13 @@ function hideControls() {
         type: "checkbox",
         class: "mdl-checkbox__input",
       });
-    if (hiddenProps.indexOf(id) == -1) {
+    if (hiddenProps.indexOf(id) === -1) {
       input.attr("checked", "true");
     }
     input.on("change", function() {
       state.setHideProperty(id, !this.checked);
       state.serialize();
+      userHasInteracted();
       d3.select(".hide-controls-link")
         .attr("href", window.location.href);
     });
@@ -1027,11 +1058,12 @@ function generateData(firstTime = false) {
     // Change the seed.
     state.seed = Math.random().toFixed(5);
     state.serialize();
+    userHasInteracted();
   }
   Math.seedrandom(state.seed);
-  let numSamples = (state.problem == Problem.REGRESSION) ?
+  let numSamples = (state.problem === Problem.REGRESSION) ?
       NUM_SAMPLES_REGRESS : NUM_SAMPLES_CLASSIFY;
-  let generator = state.problem == Problem.CLASSIFICATION ?
+  let generator = state.problem === Problem.CLASSIFICATION ?
       state.dataset : state.regDataset;
   let data = generator(numSamples, state.noise / 100);
   // Shuffle the data in-place.
@@ -1044,9 +1076,35 @@ function generateData(firstTime = false) {
   heatMap.updateTestPoints(state.showTestData ? testData : []);
 }
 
+let firstInteraction = true;
+let parametersChanged = false;
+
+function userHasInteracted() {
+  if (!firstInteraction) {
+    return;
+  }
+  firstInteraction = false;
+  let page = 'index';
+  if (state.tutorial != null && state.tutorial !== '') {
+    page = `/v/tutorials/${state.tutorial}`;
+  }
+  ga('set', 'page', page);
+  ga('send', 'pageview', {'sessionControl': 'start'});
+}
+
+function simulationStarted() {
+  ga('send', {
+    hitType: 'event',
+    eventCategory: 'Starting Simulation',
+    eventAction: parametersChanged ? 'changed' : 'unchanged',
+    eventLabel: state.tutorial == null ? '' : state.tutorial
+  });
+  parametersChanged = false;
+}
+
 drawDatasetThumbnails();
 initTutorial();
 makeGUI();
 generateData(true);
-reset();
+reset(true);
 hideControls();
